@@ -1,0 +1,327 @@
+
+<html>
+<head>
+<meta charset="utf-8" />
+<title>Highlight features containing similar data</title>
+<meta name="viewport" content="initial-scale=1,maximum-scale=1,user-scalable=no" />
+<script src="https://api.mapbox.com/mapbox-gl-js/v1.10.0/mapbox-gl.js"></script>
+<link href="https://api.mapbox.com/mapbox-gl-js/v1.10.0/mapbox-gl.css" rel="stylesheet" />
+<style>
+	body { margin: 0; padding: 0; overflow: hidden;}
+	#map { position: absolute; top: 0; bottom: 0; width: 100%; }
+	::-webkit-scrollbar {
+		width: 4px;
+	}
+	::-webkit-scrollbar-thumb {
+		border-radius: 10px;
+		-webkit-box-shadow: inset 0 0 5px rgba(0,0,0,0.2);
+		background: rgba(0,0,0,0.2);
+	}
+	::-webkit-scrollbar-track {
+		-webkit-box-shadow: inset 0 0 5px rgba(0,0,0,0.2);
+		border-radius: 0;
+		background: rgba(0,0,0,0.1);
+	}
+</style>
+</head>
+<body>
+<style>
+    .map-overlay {
+        font: 12px/20px 'Helvetica Neue', Arial, Helvetica, sans-serif;
+        background-color: #fff;
+        box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
+        border-radius: 3px;
+        position: absolute;
+        width: 25%;
+        top: 10px;
+        left: 10px;
+        padding: 10px;
+        display: none;
+    }
+</style>
+<style>
+    .filter-group {
+        font: 12px/20px 'Helvetica Neue', Arial, Helvetica, sans-serif;
+        font-weight: 600;
+        position: absolute;
+        top: 30px;
+        right: 10px;
+        z-index: 1;
+        border-radius: 3px;
+        width: 120px;
+        color: #fff;
+		bottom: 30px;
+		height: calc(100% - 60px);
+		overflow-y: auto;
+    }
+
+    .filter-group input[type='checkbox']:first-child + label {
+        border-radius: 3px 3px 0 0;
+    }
+
+    .filter-group label:last-child {
+        border-radius: 0 0 3px 3px;
+        border: none;
+    }
+
+    .filter-group input[type='checkbox'] {
+        display: none;
+    }
+
+    .filter-group input[type='checkbox'] + label {
+        background-color: #3386c0;
+        display: block;
+        cursor: pointer;
+        padding: 10px;
+        border-bottom: 1px solid rgba(0, 0, 0, 0.25);
+    }
+
+    .filter-group input[type='checkbox'] + label {
+        background-color: #3386c0;
+        text-transform: capitalize;
+    }
+
+    .filter-group input[type='checkbox'] + label:hover,
+    .filter-group input[type='checkbox']:checked + label {
+        background-color: #4ea0da;
+    }
+
+    .filter-group input[type='checkbox']:checked + label:before {
+        content: '✔';
+        margin-right: 5px;
+    }
+    
+    
+    </style>
+
+<div id="map"></div>
+<div id="map-overlay" class="map-overlay"></div>
+<nav id="filter-group" class="filter-group"></nav>
+
+<script>
+	mapboxgl.accessToken = 'pk.eyJ1IjoiamFuZXhpenp6enoiLCJhIjoiY2s5d3k2eWd1MDlxbDNpcDNhOWVwYm5hOSJ9.-bRRt6ezlyK0YcqlD5epMg';
+    //get the map backgrount
+    //添加地图，确定中心点
+     var map = new mapboxgl.Map({
+        container: 'map', //call back the map div
+        style: 'mapbox://styles/mapbox/light-v10',//get the map style
+        center: [-3.192311, 55.94926],//get the center point
+        zoom: 12 //define the zoom size
+    });
+    
+    
+    //call back the css
+    //把css里的数据传进来
+    var overlay = document.getElementById('map-overlay');//call back the div
+    var filterGroup = document.getElementById('filter-group');
+
+    // Create a popup, but don't add it to the map yet.
+    //为了鼠标移动加的，传数据
+    var popup = new mapboxgl.Popup({
+        closeButton: false
+    });
+    
+    //get the geojson data 
+    //把geojson文件传进来
+    
+    let xhr = new XMLHttpRequest();
+    xhr.open('GET', './resgeo.geojson');
+    xhr.responseType = 'json';
+    var onError =function (){ }
+    xhr.onerror=onError;
+      xhr.send();
+    
+    // delete the null value
+    //删除餐馆类型为空的数据
+    xhr.onload = function() {
+        if (xhr.status==200){
+            let res = xhr.response;
+            for(var  i=res.features.length-1; i>0;i--){
+                var obj = res.features[i].properties;
+                if (!obj['qualifier_data']){
+                    res.features.splice(i,1);
+                }
+                    }
+            
+   
+                
+    //create the map 
+    //画地图
+    map.on('load', function() {
+        // Add the source to query. In this example we're using
+        // 导入数据
+        map.addSource('counties', {
+            'type': 'geojson',
+            'data': res
+        });
+        
+        
+        //这里先做了一个鼠标移动后会显示数据的功能，首先做背景图层
+        map.addLayer(
+            {
+                'id': 'counties',
+                'type': 'circle',
+                'source': 'counties',
+                'paint': {
+                    'circle-radius': 8,
+                    'circle-color': '#228b22',
+                    'circle-stroke-color': 'white',
+                    'circle-stroke-width': 1,
+                    'circle-opacity': 0.5
+                    
+                },
+            },
+            'settlement-label'
+        ); // Place polygon under these labels.
+        
+        //当被选择后的值
+
+        map.addLayer(
+            {
+                'id': 'counties-highlighted',
+                'type': 'circle',
+                'source': 'counties',
+                'paint': {
+                    
+                    'circle-radius': 15,
+                    'circle-color': '#6e599f',
+                    'circle-stroke-color': 'white',
+                    'circle-stroke-width': 10,
+                    'circle-opacity': 0.5
+                   
+                },
+                'filter': ['in', 'qualifier_data', '']
+            },
+            'settlement-label'
+        ); // Place polygon under these labels.
+        
+        //鼠标移到该位置上的时候所显示的样例
+
+        map.on('mousemove', 'counties', function(e) {
+            // Change the cursor style as a UI indicator.
+            map.getCanvas().style.cursor = 'pointer';
+
+            // Single out the first found feature.
+            var feature = e.features[0];
+
+            // Query the counties layer visible in the map. Use the filter
+            // param to only collect results that share the same county name.
+            //这里过滤数据，选取相同类型的餐馆
+            var relatedFeatures = map.querySourceFeatures('counties', {
+                filter: ['in', 'qualifier_data', feature.properties.qualifier_data]
+            });
+
+            // Render found features in an overlay.
+            overlay.innerHTML = '';
+            
+            //展示餐馆名称？应该是
+
+            // Total the population of all features
+            var populationSum = relatedFeatures.reduce(function(memo, feature) {
+                return memo + feature.properties.name;
+            }, 0);
+            
+            //鼠标放到时所显示的气泡：餐馆类型
+
+            var title = document.createElement('strong');
+            title.textContent =
+                feature.properties.qualifier_data ;
+            
+            //右上方显示的具体数据：餐馆类型下的餐馆名称
+
+            var population = document.createElement('div');
+            population.textContent =
+                'restaurant name：   ' + feature.properties.name ;
+
+            overlay.appendChild(title);
+            overlay.appendChild(population);
+            overlay.style.display = 'block';
+
+            // Add features that share the same county name to the highlighted layer.
+            //如果是同一个餐馆类型，则会一起显示
+            map.setFilter('counties-highlighted', [
+                'in',
+                'qualifier_data', 
+                feature.properties.qualifier_data
+            ]);
+
+            // Display a popup with the name of the county
+            popup
+                .setLngLat(e.lngLat)
+                .setText(feature.properties.qualifier_data )
+                .addTo(map);
+        });
+        
+        //当鼠标移开时，不显示东西
+
+        map.on('mouseleave', 'counties', function() {
+            map.getCanvas().style.cursor = '';
+            popup.remove();
+            map.setFilter('counties-highlighted', ['in', 'qualifier_data ', '']);
+            overlay.style.display = 'none';
+        });
+        
+        
+        //make the manue
+        //这里写菜单栏，所有的餐馆型号都会在这里展示
+        res.features.forEach(function(feature) {
+            var symbol = feature.properties['qualifier_data'];
+            var layerID =  'poi-'+ symbol;
+            
+
+            // Add a layer for this symbol type if it hasn't been added already.
+            //找到具体餐馆位置的点
+            if (!map.getLayer(layerID)) {
+                map.addLayer({
+                    'id': layerID,
+                    'type': 'circle',
+                    'source': 'counties',
+                    'paint': {
+						'circle-radius': 5,
+						'circle-color': '#ff7c00',
+						'circle-stroke-color': 'white',
+						'circle-stroke-width': 1,
+						'circle-opacity': 1
+                    },
+					'layout': {
+						'visibility': 'none',
+					},
+                    'filter': ['==', 'qualifier_data', symbol] //选择传入值
+                });
+
+                // Add checkbox and label elements for the layer.
+                //传入数据
+                var input = document.createElement('input');
+                input.type = 'checkbox';
+                input.id = layerID;
+                input.checked = false;
+                filterGroup.appendChild(input);
+
+                var label = document.createElement('label');
+                label.setAttribute('for', layerID);
+                label.textContent = symbol;
+                filterGroup.appendChild(label);
+
+                // When the checkbox changes, update the visibility of the layer.
+                input.addEventListener('change', function(e) {
+                    map.setLayoutProperty(
+                        layerID,
+                        'visibility',
+                        e.target.checked ? 'visible' : 'none'
+                    );
+                });
+            }
+        });
+    });
+             } else{                   
+                    onError();               
+                }       
+            };
+    
+             
+        
+
+</script>
+
+</body>
+</html>
